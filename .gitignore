@@ -1,0 +1,11 @@
+target/
+.idea/
+*.class
+application.properties
+application.yml
+logs/
+*.log
+.mvn/
+*.jar
+*.war
+.DS_Store
