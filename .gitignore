@@ -1,11 +1,214 @@
-target/
-.idea/
-*.class
-application.properties
-application.yml
-logs/
-*.log
-.mvn/
-*.jar
-*.war
-.DS_Store
+package com.fileuploadmanagement;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class FileuploadmanagementApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(FileuploadmanagementApplication.class, args);
+	}
+
+}
+
+package com.fileuploadmanagement.controller;
+
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Optional;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.fileuploadmanagement.model.FileEntity;
+import com.fileuploadmanagement.service.FileService;
+
+@RestController
+@RequestMapping("/files")
+public class FileController {
+
+    private final FileService fileService;
+
+    public FileController(FileService fileService) {
+        this.fileService = fileService;
+    }
+
+    @PostMapping("/upload")
+    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {
+        try {
+            if (file.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("File is empty!");
+            }
+
+            System.out.println("Received file: " + file.getOriginalFilename());
+            System.out.println("File size: " + file.getSize());
+
+            fileService.storeFile(file);
+
+            return ResponseEntity.ok("File uploaded successfully: " + file.getOriginalFilename());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("File upload failed: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{fileId}")
+    public ResponseEntity<byte[]> getFileById(@PathVariable Long fileId) {
+        Optional<FileEntity> fileEntity = fileService.getFileById(fileId);
+
+        if (fileEntity.isPresent()) {
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileEntity.get().getFileName() + "\"")
+                    .body(fileEntity.get().getFileData());
+        }
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+
+    @GetMapping("/name/{fileName}")
+    public ResponseEntity<FileEntity> getFileByName(@PathVariable String fileName) {
+        Optional<FileEntity> fileEntity = fileService.getFileByName(fileName);
+        return fileEntity.map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    @DeleteMapping("/{fileId}")
+    public ResponseEntity<Void> deleteFile(@PathVariable Long fileId) {
+        fileService.deleteFile(fileId);
+        return ResponseEntity.noContent().build();
+    }
+}
+
+package com.fileuploadmanagement
+.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "files")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class FileEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String fileName;
+
+    @Column(nullable = false)
+    private String fileType;
+
+    @Lob
+    @Column(nullable = false)
+    private byte[] fileData;  // Stores file content as BLOB
+
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime uploadTime;
+
+    @PrePersist
+    protected void onCreate() {
+        this.uploadTime = LocalDateTime.now();
+    }
+}
+
+
+package com.fileuploadmanagement.repository;
+
+
+
+import com.fileuploadmanagement.model.FileEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface FileRepository extends JpaRepository<FileEntity, Long> {
+
+    Optional<FileEntity> findByFileName(String fileName);  // Find file by name
+}
+
+package com.fileuploadmanagement.service;
+
+import java.util.Optional;
+import org.springframework.web.multipart.MultipartFile;
+import com.fileuploadmanagement.model.FileEntity;
+
+public interface FileService {
+    void storeFile(MultipartFile file);
+    Optional<FileEntity> getFileById(Long fileId);
+    Optional<FileEntity> getFileByName(String fileName);
+    void deleteFile(Long fileId);
+}
+
+
+package com.fileuploadmanagement.service.impl;
+
+import java.io.IOException;
+import java.util.Optional;
+
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.fileuploadmanagement.model.FileEntity;
+import com.fileuploadmanagement.repository.FileRepository;
+import com.fileuploadmanagement.service.FileService;
+
+@Service
+public class FileServiceImpl implements FileService {
+
+    private final FileRepository fileRepository;
+
+    public FileServiceImpl(FileRepository fileRepository) {
+        this.fileRepository = fileRepository;
+    }
+
+    @Override
+    public void storeFile(MultipartFile file) {
+        try {
+            FileEntity fileEntity = new FileEntity();
+            fileEntity.setFileName(file.getOriginalFilename());
+            fileEntity.setFileData(file.getBytes());
+
+            fileRepository.save(fileEntity);
+        } catch (IOException e) {
+            throw new RuntimeException("Error saving file", e);
+        }
+    }
+
+    @Override
+    public Optional<FileEntity> getFileById(Long fileId) {
+        return fileRepository.findById(fileId);
+    }
+
+    @Override
+    public Optional<FileEntity> getFileByName(String fileName) {
+        return fileRepository.findByFileName(fileName);
+    }
+
+    @Override
+    public void deleteFile(Long fileId) {
+        fileRepository.deleteById(fileId);
+    }
+}
+
+
+

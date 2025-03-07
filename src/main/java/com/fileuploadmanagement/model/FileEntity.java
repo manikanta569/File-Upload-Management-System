@@ -1,5 +1,4 @@
-package com.fileuploadmanagement
-.model;
+package com.fileuploadmanagement.model;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -27,13 +26,9 @@ public class FileEntity {
 
     @Lob
     @Column(nullable = false)
-    private byte[] fileData;  // Stores file content as BLOB
+    private byte[] fileData;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime uploadTime;
-
-    @PrePersist
-    protected void onCreate() {
-        this.uploadTime = LocalDateTime.now();
-    }
+    @Builder.Default
+    private LocalDateTime uploadTime = LocalDateTime.now();
 }
